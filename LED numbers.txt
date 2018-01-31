@@ -1,0 +1,10 @@
+ one 7'b1001111
+ two 7'b0100100
+ three 7'b0110000
+ four 7'b0011001
+five 7'b0010010
+  six 7'b0000010
+  seven 7'b0000111
+   eight 7'b0000000
+   nine 7'b0010000
+   blank 7'b1111111
