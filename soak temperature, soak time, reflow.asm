@@ -24,6 +24,9 @@ SendString:
 SendStringDone:
     ret
 
+dseg at 0x30
+toggle_value: ds 1
+
 cseg
 ; These 'equ' must match the wiring between the microcontroller and the LCD!
 LCD_RS equ P1.1
@@ -38,20 +41,19 @@ $include(LCD_4bit.inc) ; A library of LCD related functions and utility macros
 $LIST
 
 ;                           1234567890123456    <- This helps determine the location of the counter
-soak_temp_text:  	db ' Soak   Temp    ', 0   ;'xxx Hxx Mxx Sxx'
-soak_time_text: 	db ' Soak   Time    ',0                
-reflow_temp_text:	db ' Reflow  Temp   ',0
-reflow_time_text:   db ' Reflow  Temp   ',0
-timer_message :     db 'Hr   Min   Sec  ',0
+soak_temp_text:  	db 'Soak   Temp    ', 0   ;'xxx Hxx Mxx Sxx'
+soak_time_text: 	db 'Soak   Time    ',0                
+reflow_temp_text:	db 'Reflow  Temp   ',0
+reflow_time_text:   db 'Reflow  Temp   ',0
+timer_message :     db 'Min   Sec  ',0
 temp_message :      db 'Temperature:    ',0 
 
 
 ;Buttons to select soak temperatur,soak time,reflow temperature,reflow time and enter button
-soak_temp_button 		equ p2.4
-soak_time_button        equ p2.5
-reflow_temp_button    	equ p2.6
-reflow_time_button    	equ p2.7
+toggle_button 		    equ p2.4
+increment_button        equ p2.5
 enter_button  			equ p4.5
+
 
 ;---------------------------------;
 ; Main program. Includes hardware ;
@@ -64,23 +66,42 @@ main:
  jmp start
 	; Initialization
 start:
-
-   jnb soak_temp_button ,soak_temp_jmp
-   jnb soak_time_button,soak_time_jmp
-   jnb reflow_temp_button, reflow_temp_jmp
-   jnb reflow_time_button, reflow_time_jmp
+lcall toggle_function
 jmp start
 
+toggle_function:
+jnb toggle_button,toggle_function_inc
+ret
+
+
+toggle_function_inc:
+mov a, toggle_value
+cjne a,#0x4, next
+mov toggle_value,#0x0
+next:
+mov a, toggle_value
+add a, #0x1
+mov toggle_value, a
+sjmp reflow_temp_jmp
+
 reflow_temp_jmp:
+mov a, toggle_value
+cjne a, #0x1, reflow_time_jmp 
 ljmp reflow_temp_loop
 
 reflow_time_jmp:
+mov a, toggle_value
+cjne a, #0x2, soak_temp_jmp
 ljmp reflow_time_loop
 
 soak_temp_jmp:
+mov a, toggle_value
+cjne a, #0x3, soak_time_jmp
 ljmp soak_temp_loop
 
 soak_time_jmp:
+mov a, toggle_value
+cjne a, #0x4, toggle_function
 ljmp soak_time_loop
 	
 	
@@ -119,7 +140,7 @@ reflow_time_loop:
 reflow_temp_loop:
    Set_Cursor(1,1)
    Send_Constant_String(#soak_time_text)
-   jb enter_button,start_1
+   jnb enter_button,start_1
    Set_Cursor(2,1)
    Send_Constant_String(#timer_message)
    jnb enter_button,$
