@@ -69,11 +69,12 @@ start:
 lcall toggle_function
 jmp start
 
+;checks if toggle button has been pressed
 toggle_function:
 jnb toggle_button,toggle_function_inc
 ret
 
-
+;checks value of toggle_value to see whether it is at the last option
 toggle_function_inc:
 mov a, toggle_value
 cjne a,#0x4, next
@@ -84,6 +85,7 @@ add a, #0x1
 mov toggle_value, a
 sjmp reflow_temp_jmp
 
+;following lines all check if toggle is supposed to be on the given fcn and goes to the given loop
 reflow_temp_jmp:
 mov a, toggle_value
 cjne a, #0x1, reflow_time_jmp 
@@ -104,7 +106,7 @@ mov a, toggle_value
 cjne a, #0x4, toggle_function
 ljmp soak_time_loop
 	
-	
+;loops for each option	
 soak_temp_loop:
    Set_Cursor(1,1)
    Send_Constant_String(#soak_temp_text)
