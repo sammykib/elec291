@@ -31,7 +31,18 @@ reflow_temp_value : ds 2
 reflow_time_value : ds 2
 temp_counter : ds 1
 time_counter : ds 1
+save_value: ds 1
 hundreds_value: ds 1 ;a variable to store hundreds in temperature
+; These register definitions needed by 'math32.inc'
+x:   ds 4
+y:   ds 4
+bcd: ds 5
+Result: ds 2
+
+
+BSEG
+mf: dbit 1
+
 cseg
 ; These 'equ' must match the wiring between the microcontroller and the LCD!
 LCD_RS equ P1.1
@@ -44,6 +55,9 @@ LCD_D7 equ P3.5
 $NOLIST
 $include(LCD_4bit.inc) ; A library of LCD related functions and utility macros
 $LIST
+$NOLIST
+$include(math32.inc) ; A library of LCD related functions and utility macros
+$LIST
 
 ;                       1234567890123456    <- This helps determine the location of the counter
 soak_temp_text:  	db ' Soak   Temp    ',0   
@@ -53,7 +67,10 @@ reflow_time_text:   db ' Reflow  Time   ',0
 timer_message :     db 'Time in Secs:   ',0
 temp_message :      db 'Temperature:    ',0 
 empty :      		db '                ',0 
-time_message:       db 'Time in secs:   ',0 
+time_message:       db 'Time (secs):    ',0 
+Max_temp_message_1: db 'Maximum Temp    ',0
+Max_temp_message_2: db 'Press 2 to cont ',0
+
 
 
 
@@ -63,11 +80,47 @@ increment_button        equ p2.5
 
 enter_button  			equ p4.5
 
+;max_temp:
+;mov a,temp_counter
+;cjne a, #0x50, return_max_temp
+;Set_Cursor(1,1)
+;Send_Constant_String(#Max_temp_message_1)
+;Set_Cursor(2,1)
+;Send_Constant_String(#Max_temp_message_2)
+;Wait_Milli_Seconds(#100)
+;mov a,#0x0
+;mov hundreds_value,a
+;mov temp_counter,a
+;mov display_value,a
+;jb increment_button,$ 
+;jmp return_max_temp
+
+;return_max_temp:
+;ret
+save:
+Load_x(hundreds_value)
+Load_y(100)
+lcall mul32
+Load_y(save_value)
+lcall add32
+mov save_value,x
+ret
+
+
+
+
+
+
 
 
 increment_temp:
 jb increment_button,$
 Wait_Milli_Seconds(#40)
+;mov a,hundreds_value
+;cjne a, #0x2,temp_not_50
+;lcall max_temp
+;jmp temp_not_50
+;temp_not_50:
 mov a,temp_counter
 cjne a, #0x99, increment_temp_next
 mov temp_counter, #0x0
@@ -96,10 +149,20 @@ increment_time:
 jb increment_button,$
 Wait_Milli_Seconds(#40)
 mov a,time_counter
-cjne a, #0x90, increment_time_next
+cjne a, #0x99, increment_time_next
 mov time_counter, #0x0 		          ;reset to zero
-mov display_value,time_counter
-ret 
+mov a,hundreds_value                  ;mov hundreds to a
+cjne a, #0x2, increment_100_time       ;check if it has reached 400C
+mov hundreds_value,#0x0 		          ;reset to zero
+jmp increment_temp_next 
+
+increment_100_time: 
+add a,#0x1
+mov hundreds_value,a                   	  ;increment 100 when accumulator reaches 99
+mov a,#0x0
+mov time_counter, a
+mov display_value,time_counter 
+ret
 	
 increment_time_next:
 mov a,time_counter
@@ -124,10 +187,11 @@ main:
  jmp start
 	; Initialization
 start:
-	mov temp_counter,#0
-	mov time_counter,#0
-	mov display_value,#0
-	mov hundreds_value,#0
+	mov temp_counter,#0x0
+	mov time_counter,#0x0
+	mov display_value,#0x0
+	mov hundreds_value,#0x0
+	mov save_value,#0x0
 	jnb toggle_button,soak_temp_loop
 	jmp start
 	
@@ -152,7 +216,12 @@ soak_temp_loop_2:
    	lcall increment_temp
 	Wait_Milli_Seconds(#100)   
    	jb enter_button,soak_temp_loop_2
-   	Set_Cursor(2,1)
+   	;saving
+   	mov save_value,temp_counter   
+   	lcall save
+   	mov soak_temp_value,save_value
+   	;clearing screen
+   	Set_Cursor(2,1)    
    	Send_Constant_String(#empty)
    	Wait_Milli_Seconds(#200) 
    	ljmp start
@@ -171,12 +240,19 @@ soak_time_loop_2:
    	Send_Constant_String(#soak_time_text)
    	Set_Cursor(2,1)
    	Send_Constant_String(#time_message)
+   	Set_Cursor (2,13)
+	Display_BCD (hundreds_value)
    	Set_Cursor(2,15)
    	Display_BCD (display_value)
 	lcall increment_time
    	
    	Wait_Milli_Seconds(#200)   
    	jb enter_button,soak_time_loop_2
+   	;saving
+   	mov save_value,time_counter   
+   	lcall save
+   	mov soak_time_value,save_value
+   	;clearing screen
    	Set_Cursor(2,1)
    	Send_Constant_String(#empty)
    	Wait_Milli_Seconds(#200) 
@@ -197,6 +273,8 @@ reflow_time_loop_2:
    	Send_Constant_String(#reflow_time_text)
    	Set_Cursor(2,1)
    	Send_Constant_String(#time_message)
+   	Set_Cursor (2,13)
+	Display_BCD (hundreds_value)
    	Set_Cursor (2,15)
 	Display_BCD (display_value)
 	
@@ -205,6 +283,11 @@ reflow_time_loop_2:
    	
    	Wait_Milli_Seconds(#200)   
    	jb enter_button,reflow_time_loop_2
+   	;saving
+   	mov save_value,time_counter   
+   	lcall save
+   	mov reflow_time_value,save_value
+   	;clearing screen
    	Set_Cursor(2,1)
    	Send_Constant_String(#empty)
    	Wait_Milli_Seconds(#200) 
@@ -236,6 +319,11 @@ reflow_temp_loop_2:
 	lcall increment_temp
 	Wait_Milli_Seconds(#200)   
    	jb enter_button,reflow_temp_loop_2
+   	;saving
+   	mov save_value,time_counter   
+   	lcall save
+   	mov reflow_temp_value,save_value
+   	;clearing screen
    	Set_Cursor(2,1)
    	Send_Constant_String(#empty)
    	Wait_Milli_Seconds(#200) 
