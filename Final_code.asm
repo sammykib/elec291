@@ -134,7 +134,28 @@ $NOLIST
 $include(math32.inc) ; for math functions
 $LIST
 
+;list of preset strings for the menu
+soak_temp_text:     db ' Soak   Temp    ',0   
+soak_time_text:     db ' Soak   Time    ',0                
+reflow_temp_text:   db ' Reflow  Temp   ',0
+reflow_time_text:   db ' Reflow  Time   ',0
+timer_message :     db 'Time in Secs:   ',0
+temp_message :      db 'Temperature:    ',0 
+empty :      		db '                ',0 
+time_message:       db 'Time in secs:   ',0 
 
+;menu messages
+running_menu_1:     db 'State:xxxxxxx',0
+running_menu_2:     db 'xxm xxs',0
+main_menu_1:        db 'Soldering Profile:',0
+main_menu_2:        db '[1]New [2]Load',0
+
+;text to display which state we're in
+soak_state:         db 'Soak',0
+to_peak:            db 'To Peak',0
+reflow_state:       db 'Reflow',0
+cool_state:         db 'Cooling',0
+done_state:         db 'Done',0
 
 ;-------------------------------------------;
 ;            SPI Initialization             ;
@@ -424,6 +445,8 @@ ret
 
 state_soak:
 cjne a, #2, state_topeak
+Set_Cursor(1,7)
+Send_Constant_String(#soak_state)
 mov pwm, #20
 mov a, BCD_soak_time
 clr c
@@ -436,6 +459,8 @@ ret
 
 state_topeak:
 cjne a, #3, state_reflow
+Set_Cursor(1,7)
+Send_Constant_String(#to_peak)
 mov pwm, #100
 mov a, BCD_reflow_temp
 clr c
@@ -448,6 +473,8 @@ ret
 
 state_reflow:
 cjne a, #4, state_cool
+Set_Cursor(1,7)
+Send_Constant_String(#reflow_state)
 mov pwm, #20
 mov a, BCD_reflow_time
 clr c
@@ -460,6 +487,8 @@ ret
 
 state_cool:
 cjne a, #5, state_done
+Set_Cursor(1,7)
+Send_Constant_String(#cool_state)
 mov pwm, #0
 mov a, temp_cool
 clr c
@@ -472,12 +501,30 @@ ret
 state_done:
 ;compliment timer 2 which speaker will be used in for "end beep" output
 ; Display 'OPEN DOOR' on LCD
+Set_Cursor(1,7)
+Send_Constant_String(#done_state)
 mov a, #40H
 clr c
 subb a, Temperature
 jnc state_done_done
 ;Display "SAFE TEMP"
 state_done_done:
+ret
+
+;code for the main menu and running menu
+running_menu: 
+Set_Cursor(1,1)
+Send_Constant_String(#main_menu_1)
+Set_Cursor(2,1)
+Send_Constant_String(#main_menu_2)
+ret
+
+main_menu:
+Set_Cursor(1,1)
+Send_Constant_String(#main_menu_1)
+Set_Cursor(2,1)
+Send_Constant_String(#main_menu_2)
+;button instructs for going to new/load screens
 ret
 
  
