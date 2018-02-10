@@ -68,8 +68,9 @@ timer_message :     db 'Time in Secs:   ',0
 temp_message :      db 'Temperature:    ',0 
 empty :      		db '                ',0 
 time_message:       db 'Time (secs):    ',0 
-Max_temp_message_1: db 'Maximum Temp    ',0
-Max_temp_message_2: db 'Press 2 to cont ',0
+Max_message_1:      db 'Maximum reached ',0
+Max_message_2:      db 'Press 2 to reset',0
+Max_message_3:      db 'Or 3+2 to save:)',0
 
 
 
@@ -77,26 +78,51 @@ Max_temp_message_2: db 'Press 2 to cont ',0
 ;Buttons to select soak temperatur,soak time,reflow temperature,reflow time and enter button
 toggle_button 			equ p2.4
 increment_button        equ p2.5
-
 enter_button  			equ p4.5
 
-;max_temp:
-;mov a,temp_counter
-;cjne a, #0x50, return_max_temp
-;Set_Cursor(1,1)
-;Send_Constant_String(#Max_temp_message_1)
-;Set_Cursor(2,1)
-;Send_Constant_String(#Max_temp_message_2)
-;Wait_Milli_Seconds(#100)
-;mov a,#0x0
-;mov hundreds_value,a
-;mov temp_counter,a
-;mov display_value,a
-;jb increment_button,$ 
-;jmp return_max_temp
+max_time:
+mov a,time_counter
+cjne a, #0x20, return_max_time
+mov a,#0x0
+mov hundreds_value,a
+mov time_counter,a
+lcall flicker_message
+return_max_time:
+ret
 
-;return_max_temp:
-;ret
+flicker_message:
+Set_Cursor(1,1)
+Send_Constant_String(#Max_message_1)
+Set_Cursor(2,1)
+Send_Constant_String(#Max_message_2)
+Wait_Milli_Seconds(#250)
+Wait_Milli_Seconds(#250)
+Wait_Milli_Seconds(#250)
+Wait_Milli_Seconds(#250)
+Set_Cursor(2,1)
+Send_Constant_String(#Max_message_3)
+Wait_Milli_Seconds(#250)
+Wait_Milli_Seconds(#250)
+Wait_Milli_Seconds(#250)
+Wait_Milli_Seconds(#250)
+jb increment_button,go_flicker  
+ret
+
+go_flicker:
+ljmp flicker_message
+
+max_temp:
+mov a,temp_counter
+cjne a, #0x50, return_max_temp
+mov a,#0x0
+mov hundreds_value,a
+mov temp_counter,a
+lcall flicker_message
+return_max_temp:
+ret
+
+
+
 save:
 Load_x(hundreds_value)
 Load_y(100)
@@ -107,27 +133,22 @@ mov save_value,x
 ret
 
 
-
-
-
-
-
-
 increment_temp:
 jb increment_button,$
 Wait_Milli_Seconds(#40)
-;mov a,hundreds_value
-;cjne a, #0x2,temp_not_50
-;lcall max_temp
-;jmp temp_not_50
-;temp_not_50:
+mov a,hundreds_value
+cjne a, #0x2,temp_not_50
+lcall max_temp
+
+
+temp_not_50:
 mov a,temp_counter
 cjne a, #0x99, increment_temp_next
 mov temp_counter, #0x0
 mov a,hundreds_value                  ;mov hundreds to a
 cjne a, #0x3, increment_100       ;check if it has reached 400C
 mov hundreds_value,#0x0 		          ;reset to zero
-jmp increment_temp_next
+ljmp increment_temp_next
 
 increment_100: 
 add a,#0x1
@@ -148,13 +169,18 @@ ret
 increment_time:
 jb increment_button,$
 Wait_Milli_Seconds(#40)
+mov a,hundreds_value
+cjne a, #0x1,time_not_20
+lcall max_time
+
+time_not_20:
 mov a,time_counter
 cjne a, #0x99, increment_time_next
 mov time_counter, #0x0 		          ;reset to zero
 mov a,hundreds_value                  ;mov hundreds to a
 cjne a, #0x2, increment_100_time       ;check if it has reached 400C
 mov hundreds_value,#0x0 		          ;reset to zero
-jmp increment_temp_next 
+ljmp increment_temp_next 
 
 increment_100_time: 
 add a,#0x1
@@ -184,7 +210,7 @@ ret
 main:
  mov SP, #0x7F
  lcall LCD_4bit
- jmp start
+ ljmp start
 	; Initialization
 start:
 	mov temp_counter,#0x0
@@ -193,7 +219,7 @@ start:
 	mov hundreds_value,#0x0
 	mov save_value,#0x0
 	jnb toggle_button,soak_temp_loop
-	jmp start
+	ljmp start
 	
 soak_temp_loop:
 	Set_Cursor(1,1)
