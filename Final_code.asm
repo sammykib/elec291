@@ -53,7 +53,16 @@ BCD_reflow_time: 	ds 2
 SoakTime_Secs:   	ds 2
 ReflowTime_Secs: 	ds 2
 
-
+;variables from selecting soak+reflow code
+display_value : ds 2
+soak_time_value: ds 2
+soak_temp_value : ds 2
+reflow_temp_value : ds 2
+reflow_time_value : ds 2
+temp_counter : ds 1
+time_counter : ds 1
+hundreds_value: ds 1 ;a variable to store hundreds in temperature
+save_value:     ds 1
 
 pwm_count:	 	ds 1
 pwm:		 	ds 1
@@ -64,7 +73,7 @@ settings_num:	ds 1
 ;arithmetic variables
 x: 			ds 4
 y: 		   	ds 4
-Result: 		ds 2	
+Result:     ds 2	
 
 ;-------------------------------------------;
 ;                  Flags                    ;
@@ -77,7 +86,7 @@ SoakState_Flag: 		dbit 1
 RampState_Flag:	 		dbit 1
 ReflowState_Flag: 		dbit 1
 CooldownState_Flag: 	dbit 1
-
+running_flag:           dbit 1
 
 CoolEnoughToOpen_Flag: 		dbit 1
 CoolEnoughToTouch_Flag: 	dbit 1
@@ -107,9 +116,9 @@ FT93C66_MISO EQU P2.2
 FT93C66_SCLK EQU P2.3 
 
 ;LCD pins
-LCD_RS  	EQU P1.2
-LCD_RW  	EQU P1.3
-LCD_E   	EQU P1.4
+LCD_RS  	EQU P1.1
+LCD_RW  	EQU P1.2
+LCD_E   	EQU P1.3
 LCD_D4  	EQU P3.2
 LCD_D5  	EQU P3.3
 LCD_D6  	EQU P3.4
@@ -119,11 +128,11 @@ SOUND_OUT EQU P3.7 ;Temp value, modify to whatever pin is attached to speaker
 POWER     EQU P2.4
 TRANSITION EQU P0.7
 ;Pushbutton pins
-Button_1      	EQU P0.1 ;1
-Button_2      	EQU P0.3 ;2
-Button_3      	EQU P0.5 ;3
-DONE_BUTTON   	EQU P2.5 ;4
-BOOT_BUTTON   	EQU P4.5 ;5 
+toggle_button    EQU P0.1 ;1
+increment_button EQU P0.3 ;2
+enter_button     EQU P0.5 ;3
+DONE_BUTTON   	 EQU P2.5 ;4
+BOOT_BUTTON   	 EQU P4.5 ;5 
 
 $NOLIST
 $include(LCD_4Bit.inc)
@@ -140,6 +149,22 @@ $NOLIST
 $include(FT93C66.inc); for non-volitile memory chip 93C66 commands
 $LIST
 
+;messages for display
+soak_temp_text:  	db ' Soak   Temp    ',0   
+soak_time_text: 	db ' Soak   Time    ',0                
+reflow_temp_text:	db ' Reflow  Temp   ',0
+reflow_time_text:   db ' Reflow  Time   ',0
+timer_message :     db 'Time in Secs:   ',0
+temp_message :      db 'Temperature:    ',0 
+empty :      		db '                ',0 
+main_menu_1:        db 'Soldering Profile:',0
+main_menu_2:        db '[1]New [2]Load',0
+running_menu_1:     db 'State:',0
+running_menu_2:     db '  m  s',0
+time_message:       db 'Time (secs):    ',0 
+Max_message_1:      db 'Maximum reached ',0
+Max_message_2:      db 'Press 2 to reset',0
+Max_message_3:      db 'Or 3+2 to save:)',0
 
 ;-------------------------------------------;
 ;            SPI Initialization             ;
@@ -287,6 +312,7 @@ SecondPassed:
 	; 1 second has passed.  Set a flag so the main program knows
 	setb Seconds_flag ; Let the main program know a second had passed
 	setb HalfSecond_Flag
+	
 	jb SoakState_Flag, soak_timer
 	jb ReflowState_Flag, reflow_timer
 	ljmp ContinueISR
@@ -411,27 +437,169 @@ Timer2_ISR_done:
  	sjmp forever
  
 forever:
+    mov temp_counter,#0x0
+	mov time_counter,#0x0
+	mov display_value,#0x0
+	mov hundreds_value,#0x0
+	mov save_value,#0x0
 ;get SPI code from Jackey
 
-jb start_menu_button,next
-jnb start_menu_button,next
-jb start_menu_button,$
+;jb start_menu_button,next
+;jnb start_menu_button,next
+;jb start_menu_button,$
 ;lcall menu branch
-
+lcall main_menu
+jnb toggle_button,soak_temp_loop
+Wait_Milli_Seconds(#50)
+jb toggle_button,soak_temp_loop
+jb toggle_button,$
 
 next:
 lcall Reflow_States
 
 ljmp forever
 
+soak_temp_loop:
+	Set_Cursor(1,1)
+   	Send_Constant_String(#soak_temp_text)
+   	Wait_Milli_Seconds(#200) 
+   	jb toggle_button,$
+	jnb enter_button,soak_temp_loop_2
+	ljmp soak_time_loop
 
+soak_temp_loop_2:	
+   	Set_Cursor(1,1)
+   	Send_Constant_String(#soak_temp_text)
+   	Set_Cursor(2,1)
+	Send_Constant_String(#temp_message)
+	Set_Cursor (2,13)
+	Display_BCD (hundreds_value)
+	Set_Cursor (2,15)
+	Display_BCD (display_value)
+   
+   	lcall increment_temp
+	Wait_Milli_Seconds(#100)   
+   	jb enter_button,soak_temp_loop_2
+   	;saving
+   	mov save_value,temp_counter   
+   	lcall save
+   	mov BCD_soak_temp,save_value
+   	;clearing screen
+   	Set_Cursor(2,1)    
+   	Send_Constant_String(#empty)
+   	Wait_Milli_Seconds(#200) 
+   	ljmp forever
+   
+soak_time_loop:
+	Set_Cursor(1,1)
+   	Send_Constant_String(#soak_time_text)
+   	Wait_Milli_Seconds(#200) 
+   	jb toggle_button,$
+	jnb enter_button,soak_time_loop_2
+	ljmp reflow_time_loop
+	
+	
+soak_time_loop_2:	
+   	Set_Cursor(1,1)
+   	Send_Constant_String(#soak_time_text)
+   	Set_Cursor(2,1)
+   	Send_Constant_String(#time_message)
+   	Set_Cursor (2,13)
+	Display_BCD (hundreds_value)
+   	Set_Cursor(2,15)
+   	Display_BCD (display_value)
+	lcall increment_time
+   	
+   	Wait_Milli_Seconds(#200)   
+   	jb enter_button,soak_time_loop_2
+   	;saving
+   	mov save_value,time_counter   
+   	lcall save
+   	mov BCD_soak_time,save_value
+   	;clearing screen
+   	Set_Cursor(2,1)
+   	Send_Constant_String(#empty)
+   	Wait_Milli_Seconds(#200) 
+   	ljmp forever
+   
+reflow_time_loop:
+	Set_Cursor(1,1)
+   	Send_Constant_String(#reflow_time_text)
+   	Wait_Milli_Seconds(#200)
+   	jb toggle_button,$
+	jnb enter_button,reflow_time_loop_2
+	ljmp reflow_temp_loop
+	
+	
+	
+reflow_time_loop_2:	
+   	Set_Cursor(1,1)
+   	Send_Constant_String(#reflow_time_text)
+   	Set_Cursor(2,1)
+   	Send_Constant_String(#time_message)
+   	Set_Cursor (2,13)
+	Display_BCD (hundreds_value)
+   	Set_Cursor (2,15)
+	Display_BCD (display_value)
+	
+	lcall increment_time
+   	
+   	
+   	Wait_Milli_Seconds(#200)   
+   	jb enter_button,reflow_time_loop_2
+   	;saving
+   	mov save_value,time_counter   
+   	lcall save
+   	mov BCD_reflow_time,save_value
+   	;clearing screen
+   	Set_Cursor(2,1)
+   	Send_Constant_String(#empty)
+   	Wait_Milli_Seconds(#200) 
+   	ljmp forever
+      
+	
+	
+reflow_temp_loop:
+	Set_Cursor(1,1)
+   	Send_Constant_String(#reflow_temp_text)
+   	Wait_Milli_Seconds(#200) 
+   	jb toggle_button,$
+	jnb enter_button,reflow_temp_loop_2
+	ljmp forever
+	
+		
+	
+	
+reflow_temp_loop_2:	
+	Set_Cursor(1,1)
+	Send_Constant_String(#reflow_temp_text)
+	Set_Cursor(2,1)
+	Send_Constant_String(#temp_message)
+	Set_Cursor (2,13)
+	Display_BCD (hundreds_value)
+	Set_Cursor (2,15)
+	Display_BCD (display_value)
+	
+	lcall increment_temp
+	Wait_Milli_Seconds(#200)   
+   	jb enter_button,reflow_temp_loop_2
+   	;saving
+   	mov save_value,time_counter   
+   	lcall save
+   	mov BCD_reflow_temp,save_value
+   	;clearing screen
+   	Set_Cursor(2,1)
+   	Send_Constant_String(#empty)
+   	Wait_Milli_Seconds(#200) 
+    ljmp soak_temp_loop	
+    
 Reflow_States:
 mov a, state
 
 state_start:
 cjne a, #0, state_tosoak
 mov pwm, #0
-jb Button_1, state_start_done
+;jb Button_1, state_start_done //commented for debugging
 ;jnb Button_1, $ ; Wait for key release
 setb TR0
 Wait_Milli_Seconds(#50)
@@ -519,6 +687,7 @@ ret
 state_done:
 ;compliment timer 2 which speaker will be used in for "end beep" output
 ; Display 'OPEN DOOR' on LCD
+clr running_flag
 mov a, #40H
 clr c
 subb a, Temp
@@ -628,8 +797,8 @@ Read_values:
 	Load_y(2400)
 	lcall add32
 	lcall hex2Temp
-    mov DPTR, #space
-    lcall SendString ;CODE FOR DEBUGGING ONLY
+    ;mov DPTR, #space
+    ;lcall SendString ;CODE FOR DEBUGGING ONLY
 	Send_BCD(Temp+2)
     Send_BCD(Temp+1)
     Send_BCD(Temp+0)
@@ -829,5 +998,24 @@ Delay:
     Wait_Milli_Seconds(#100)
     ret
 
+
+running_menu: 
+    setb running_flag
+    Set_Cursor(1,1)
+    Send_Constant_String(#running_menu_1)
+    Set_Cursor(2,1)
+    Send_Constant_String(#running_menu_2)
+    Set_Cursor(2,1)
+    Display_BCD(Mins_BCD)
+    Set_Cursor(2,4)
+    Display_BCD(Secs_BCD)
+ret
+
+main_menu:
+     Set_Cursor(1,1)
+     Send_Constant_String(#main_menu_1)
+     Set_Cursor(2,1)
+     Send_Constant_String(#main_menu_2)
+ret
+
 END
-  
