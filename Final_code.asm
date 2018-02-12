@@ -1,4 +1,7 @@
-$MODLP52
+;$MODLP52
+$NOLIST
+$MODLP51
+$LIST
 
 org 0x0000
 	ljmp MainProgram
@@ -128,10 +131,10 @@ SOUND_OUT EQU P3.7 ;Temp value, modify to whatever pin is attached to speaker
 POWER     EQU P2.4
 TRANSITION EQU P0.7
 ;Pushbutton pins
-toggle_button    EQU P0.1 ;1
-increment_button EQU P0.3 ;2
-enter_button     EQU P0.5 ;3
-DONE_BUTTON   	 EQU P2.5 ;4
+toggle_button    EQU P2.5 ;1
+increment_button EQU P2.6 ;2
+enter_button     EQU P2.7 ;3
+DONE_BUTTON   	 EQU P0.1 ;4
 BOOT_BUTTON   	 EQU P4.5 ;5 
 
 $NOLIST
@@ -157,7 +160,7 @@ reflow_time_text:   db ' Reflow  Time   ',0
 timer_message :     db 'Time in Secs:   ',0
 temp_message :      db 'Temperature:    ',0 
 empty :      		db '                ',0 
-main_menu_1:        db 'Soldering Profile:',0
+main_menu_1:        db 'Reflow Profile:',0
 main_menu_2:        db '[1]New [2]Load',0
 running_menu_1:     db 'State:',0
 running_menu_2:     db '  m  s',0
@@ -165,6 +168,12 @@ time_message:       db 'Time (secs):    ',0
 Max_message_1:      db 'Maximum reached ',0
 Max_message_2:      db 'Press 2 to reset',0
 Max_message_3:      db 'Or 3+2 to save:)',0
+new_profile_string: db 'New:            ',0
+load_profile_string:db 'Load:           ',0
+profile_options:    db '[1] [2] [3]     ',0
+show_1:             db '1               ',0
+show_2:             db '2               ',0
+show_3:             db '3               ',0
 
 ;-------------------------------------------;
 ;            SPI Initialization             ;
@@ -384,9 +393,10 @@ Timer2_ISR_done:
   ;Start of the Main Program
   MainProgram:
   	mov SP, #7FH ; Set the stack pointer to the begining of idata
-    	mov PMOD, #0 ; Configure all ports in bidirectional mode
+    	;mov PMOD, #0 ; Configure all ports in bidirectional mode
     	setb CE_ADC ;ADC enabled when bit is cleared, so start disabled
-    
+        mov P0M0, #0
+        mov P0M1, #0 
     	;Initialize Serial Port Interface, and LCD
     	lcall InitSerialPort
     	lcall INIT_SPI
@@ -449,10 +459,10 @@ forever:
 ;jb start_menu_button,$
 ;lcall menu branch
 lcall main_menu
-jnb toggle_button,soak_temp_loop
-Wait_Milli_Seconds(#50)
-jb toggle_button,soak_temp_loop
-jb toggle_button,$
+;jnb toggle_button,soak_temp_loop
+;Wait_Milli_Seconds(#50)
+;jb toggle_button,soak_temp_loop  this code was used for testing
+;jb toggle_button,$
 
 next:
 lcall Reflow_States
@@ -1016,6 +1026,81 @@ main_menu:
      Send_Constant_String(#main_menu_1)
      Set_Cursor(2,1)
      Send_Constant_String(#main_menu_2)
-ret
+      ;button to go to write a new profile
+      jnb toggle_button,new_profile
+      Wait_Milli_Seconds(#50)
+      ;jnb toggle_button,new_profile  
+      ;jb toggle_button,$
+      ;button to go to load preset profile
+      jnb increment_button,load_profile_jump
+      Wait_Milli_Seconds(#50)
+      ;jb increment_button,load_profile_jump
+      ;jnb increment_button,$
+  ret
+
+load_profile_jump:  
+ljmp load_profile
+
+new_profile:
+   Wait_Milli_Seconds(#80)
+   Set_Cursor(1,1)
+   Send_Constant_String(#new_profile_string)
+   Set_Cursor(2,1)
+   Send_Constant_String(#profile_options)
+   
+   ;profile selection 
+   jnb toggle_button,new_profile_1
+   Wait_Milli_Seconds(#50)
+   jnb increment_button,new_profile_2
+   Wait_Milli_Seconds(#50)
+   jnb enter_button,new_profile_3
+   Wait_Milli_Seconds(#50)
+   ljmp new_profile
+   
+new_profile_1:
+  Set_Cursor(1,1)
+  Send_Constant_String(#show_1)
+  ljmp new_profile_1
+  
+new_profile_2:
+  Set_Cursor(1,1)
+  Send_Constant_String(#show_2)
+  ljmp new_profile_2
+
+new_profile_3:
+  Set_Cursor(1,1)
+  Send_Constant_String(#show_3)
+  ljmp new_profile_3
+   
+load_profile: 
+   Wait_Milli_Seconds(#80)
+   Set_Cursor(1,1)
+   Send_Constant_String(#load_profile_string)
+   Set_Cursor(2,1)
+   Send_Constant_String(#profile_options)
+   
+   ;profile selection
+   jnb toggle_button,load_profile_1
+   Wait_Milli_Seconds(#50)
+   jnb increment_button,load_profile_2
+   Wait_Milli_Seconds(#50)
+   jnb enter_button,load_profile_3
+   Wait_Milli_Seconds(#50)
+   ljmp load_profile
+
+load_profile_1:
+  Set_Cursor(1,1)
+  Send_Constant_String(#show_1)
+  ljmp load_profile_1
+
+load_profile_2:
+  Set_Cursor(1,1)
+  Send_Constant_String(#show_2)
+ljmp load_profile_2
+
+load_profile_3:
+  Set_Cursor(1,1)
+  Send_Constant_String(#show_3)
+ljmp load_profile_3
 
 END
